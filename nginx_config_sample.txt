@@ -1,0 +1,74 @@
+# Youtube cache with bytes range support
+  server {
+server_name .googlevideo.com;
+access_log /home/httpd-logs/access.log;
+error_log /home/httpd-logs/error.log;
+root /home/googlevideo.com/;
+gzip off;
+etag off;
+ if ($http_host ~* "(.*).googlevideo.com" ) {
+  set $ythost $1;
+ }
+location /videogoodput { 
+ add_header 'Access-Control-Allow-Origin' 'http://www.youtube.com';
+ add_header 'Access-Control-Allow-Credentials' 'true';
+ return 200;
+}
+location / {
+ range; # require nginx_http_range_module
+ root /var/cache/hrcfs/media;
+ add_header 'Access-Control-Allow-Origin' 'http://www.youtube.com';
+ add_header 'Access-Control-Allow-Credentials' 'true';
+ add_header 'X-DEBUG' 'CACHE';
+ set $tk $arg_cver$arg_initcwndbps; # BYPASS
+ if ( $tk ~* ^html5([0-9]+)$ ) {
+  rewrite ^(.*)$ /videoplayback last;
+ }
+ if ( $args  ~* "(.*)range(.*)" ) {
+  set $myargs $1norange$2;
+ }
+ if ( $myargs = "" ) {
+  set $myargs $args;
+ }
+ if ( $myargs = "" ) {
+  return 405;
+ }
+
+ types {
+  video/flv 5;
+  video/mp4 18;
+  video/mp4 22;
+  video/flv 34;
+  video/webm 242; # 240p / vp9
+  video/webm 243; # 360p / vp9
+  video/webm 244; # 480p / vp9
+  video/webm 247; # 720p / vp9
+  video/webm 248; # 1080p / vp9
+  video/webm 271; # 1440p / vp9
+  video/webm 272; # 2160p / vp9
+  audio/mp4 139; # 48
+  audio/mp4 140; # 128
+  audio/mp4 141; # 256
+  audio/webm 250; # ?
+  audio/webm 251; # ?
+  audio/webm 171; # 128
+  audio/webm 172; # 192
+ }
+ set $cache_key $cookie_VID.H.$arg_itag;
+ set $comments $remote_addr;
+ set $d /$cache_key#$ythost#$myargs#$comments#.H.$arg_itag;
+ add_header 'X-CACHE-KEY' $cache_key;
+ rewrite ^(.*)$ $d break;
+}
+location /videoplayback {
+ add_header 'Access-Control-Allow-Origin' 'http://www.youtube.com';
+ add_header 'Access-Control-Allow-Credentials' 'true';
+ add_header 'X-DEBUG' 'BYPASS';
+ resolver 127.0.0.1;
+  set $myscheme "http";
+  if ($args ~* "requiressl" ) {
+   set $myscheme "https"; # nginx SSL modules required 
+  }
+ proxy_pass $myscheme://$ythost.googlevideo.com;
+}
+  }
